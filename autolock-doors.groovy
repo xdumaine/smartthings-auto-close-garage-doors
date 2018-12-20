@@ -9,25 +9,38 @@ definition(
 )
 
 preferences{
-    section("Select the Garage Doors") {
-        input "garages", "capability.doorControl", required: true, multiple: true
-    }
-    section("Automatically close the doors x minutes after opened...") {
-        input "minutesLater", "number", title: "Delay (in minutes):", required: true
-    }
-    section("Disable auto close when...") {
-        input "modes", "mode", title: "Select mode(s) (optional)", multiple: true
-    }
-    section( "Notifications for Success" ) {
-        input("recipients", "contact", title: "Send notifications to", required: false, multiple: true) {
-            input "sendPushSuccess", "enum", title: "Send a push notification?", options: ["Yes", "No"], required: false
-            input "phoneSuccess", "phone", title: "Send a Text Message?", required: false
+    page(name: "pageOne", title: "Close these Doors", nextPage: "pageTwo", uninstall: true) {
+        section {
+            input "garages", "capability.doorControl", required: true, multiple: true
         }
     }
-    section( "Notifications for Errors" ) {
-        input("recipients", "contact", title: "Send notifications to", required: false, mulitple: true) {
-            input "sendPushError", "enum", title: "Send a push notification?", options: ["Yes", "No"], required: false
-            input "phoneError", "phone", title: "Send a Text Message?", required: false
+    page(name: "pageTwo", title: "based on time...", nextPage: "pageThree", uninstall: false) {
+        section {
+            input "minutesLater", "number", title: "after __ minutes", required: true
+        }
+    }
+    page(name: "pageThree", title: "based on presence...", nextPage: "pageFour", uninstall: false) {
+        section("when anyone leaves...") {
+            input "anyLeave", "capability.presenceSensor", title: "Who?", required: false, multiple: true
+        }
+    }
+    page(name: "pageFour", title: "Except when...", nextPage: "pageFive", uninstall: false) {
+        section {
+            input "modes", "mode", title: "in mode(s)", multiple: true, require: false
+        }
+    }
+    page(name: "pageFive", title: "And be notified", install: true) {
+        section( "for success messages" ) {
+            input("recipients", "contact", title: "Send notifications to", required: false, multiple: true) {
+                input "sendPushSuccess", "enum", title: "Send a push notification?", options: ["Yes", "No"], required: false
+                input "phoneSuccess", "phone", title: "Send a Text Message?", required: false
+            }
+        }
+        section( "for errors" ) {
+            input("recipients", "contact", title: "Send notifications to", required: false, mulitple: true) {
+                input "sendPushError", "enum", title: "Send a push notification?", options: ["Yes", "No"], required: false
+                input "phoneError", "phone", title: "Send a Text Message?", required: false
+            }
         }
     }
 }
@@ -46,7 +59,7 @@ def initialize () {
     log.debug "Settings: ${settings}"
     try {
         garages.each {
-            subscribe(it, "close", doorHandler, [filterEvents: false])
+            subscribe(it, "contact", doorHandler, [filterEvents: false])
             it.close()
         }
     } catch (all) {
@@ -87,8 +100,7 @@ def closeDoors () {
 
 def doorHandler (evt) {
     log.debug("Handling event: " + evt.value)
-    def open = garages.find { it.latestValue("door") != "closed" }
-    if (open && evt.value != "open") {
+    if (evt.value == "open") {
         log.debug("Scheduling close because ${open} was open")
         try {
             runIn((minutesLater * 60), closeDoors) // ...schedule (in minutes) to close.
